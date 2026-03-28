@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Simulated Jenkins Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
+    h1 { color: #e94560; margin-bottom: 10px; }
+    .subtitle { color: #aaa; margin-bottom: 30px; }
+    .stats { display: flex; gap: 15px; margin-bottom: 30px; }
+    .stat-card { background: #16213e; padding: 20px; border-radius: 8px; flex: 1; text-align: center; }
+    .stat-card h2 { font-size: 2em; }
+    .stat-card p { color: #aaa; font-size: 0.9em; }
+    .queued { border-top: 3px solid #f39c12; }
+    .in_progress { border-top: 3px solid #3498db; }
+    .completed { border-top: 3px solid #2ecc71; }
+    .failed { border-top: 3px solid #e74c3c; }
+    .workers { display: flex; gap: 15px; margin-bottom: 30px; }
+    .worker-card { background: #16213e; padding: 15px; border-radius: 8px; flex: 1; text-align: center; }
+    .worker-card.busy { border: 1px solid #e94560; }
+    .worker-card.free { border: 1px solid #2ecc71; }
+    .worker-status { font-size: 0.8em; margin-top: 5px; }
+    .busy .worker-status { color: #e94560; }
+    .free .worker-status { color: #2ecc71; }
+    .columns { display: flex; gap: 15px; }
+    .column { flex: 1; background: #16213e; border-radius: 8px; padding: 15px; }
+    .column h3 { margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #333; }
+    .queued-title { color: #f39c12; }
+    .progress-title { color: #3498db; }
+    .done-title { color: #2ecc71; }
+    .failed-title { color: #e74c3c; }
+    .job-card { background: #0f3460; border-radius: 6px; padding: 12px; margin-bottom: 10px; }
+    .job-id { font-size: 0.7em; color: #aaa; margin-bottom: 5px; }
+    .job-repo { font-weight: bold; margin-bottom: 3px; }
+    .job-meta { font-size: 0.8em; color: #aaa; margin-bottom: 8px; }
+    .stages { display: flex; gap: 5px; margin-top: 8px; }
+    .stage { padding: 3px 8px; border-radius: 4px; font-size: 0.75em; }
+    .stage.pending { background: #333; color: #aaa; }
+    .stage.running { background: #2980b9; color: white; }
+    .stage.success { background: #27ae60; color: white; }
+    .stage.failed { background: #c0392b; color: white; }
+    .stage.skipped { background: #555; color: #aaa; }
+    .trigger-btn { background: #e94560; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-size: 1em; margin-bottom: 20px; }
+    .trigger-btn:hover { background: #c0392b; }
+    .refresh { color: #aaa; font-size: 0.8em; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <h1>🔧 Simulated Jenkins Dashboard</h1>
+  <p class="subtitle">Job Scheduler & Pipeline Manager</p>
+
+  <button class="trigger-btn" onclick="triggerJob()">⚡ Trigger New Job</button>
+  <p class="refresh">Auto-refreshes every 3 seconds</p>
+
+  <div class="stats">
+    <div class="stat-card queued"><h2 id="count-queued">0</h2><p>Queued</p></div>
+    <div class="stat-card in_progress"><h2 id="count-progress">0</h2><p>In Progress</p></div>
+    <div class="stat-card completed"><h2 id="count-completed">0</h2><p>Completed</p></div>
+    <div class="stat-card failed"><h2 id="count-failed">0</h2><p>Failed</p></div>
+  </div>
+
+  <h3 style="margin-bottom:15px; color:#aaa;">Workers</h3>
+  <div class="workers" id="workers"></div>
+
+  <div class="columns">
+    <div class="column"><h3 class="queued-title">⏳ Queued</h3><div id="queued-jobs"></div></div>
+    <div class="column"><h3 class="progress-title">🔄 In Progress</h3><div id="progress-jobs"></div></div>
+    <div class="column"><h3 class="done-title">✅ Completed</h3><div id="completed-jobs"></div></div>
+    <div class="column"><h3 class="failed-title">❌ Failed</h3><div id="failed-jobs"></div></div>
+  </div>
+
+  <script>
+    const repos = ['myapp', 'api-service', 'frontend', 'data-pipeline'];
+    const branches = ['main', 'dev', 'feature/auth', 'hotfix/bug'];
+    const languages = ['python', 'node', 'general'];
+
+    function randomItem(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+    function randomHash() { return Math.random().toString(36).substring(2, 10); }
+
+    async function triggerJob() {
+      const payload = {
+        repo: randomItem(repos),
+        branch: randomItem(branches),
+        commit_hash: randomHash(),
+        language: randomItem(languages)
+      };
+      await fetch('/webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      refresh();
+    }
+
+    function jobCard(job) {
+      const stages = job.stages.map(s =>
+        `<span class="stage ${s.status}">${s.name}</span>`
+      ).join('');
+      return `
+        <div class="job-card">
+          <div class="job-id">${job.id.substring(0, 8)}...</div>
+          <div class="job-repo">📦 ${job.repo}</div>
+          <div class="job-meta">🌿 ${job.branch} | 🔤 ${job.language} ${job.worker_id ? '| 🔧 ' + job.worker_id : ''}</div>
+          <div class="stages">${stages}</div>
+        </div>`;
+    }
+
+    async function refresh() {
+      const [jobs, workers] = await Promise.all([
+        fetch('/jobs').then(r => r.json()),
+        fetch('/workers').then(r => r.json())
+      ]);
+
+      document.getElementById('count-queued').textContent = jobs.filter(j => j.status === 'queued').length;
+      document.getElementById('count-progress').textContent = jobs.filter(j => j.status === 'in_progress').length;
+      document.getElementById('count-completed').textContent = jobs.filter(j => j.status === 'completed').length;
+      document.getElementById('count-failed').textContent = jobs.filter(j => j.status === 'failed').length;
+
+      document.getElementById('workers').innerHTML = workers.map(w => `
+        <div class="worker-card ${w.busy ? 'busy' : 'free'}">
+          <div>🔧 ${w.name}</div>
+          <div class="worker-status">${w.busy ? '🔴 Busy' : '🟢 Available'}</div>
+        </div>`).join('');
+
+      document.getElementById('queued-jobs').innerHTML = jobs.filter(j => j.status === 'queued').map(jobCard).join('') || '<p style="color:#aaa">No jobs</p>';
+      document.getElementById('progress-jobs').innerHTML = jobs.filter(j => j.status === 'in_progress').map(jobCard).join('') || '<p style="color:#aaa">No jobs</p>';
+      document.getElementById('completed-jobs').innerHTML = jobs.filter(j => j.status === 'completed').map(jobCard).join('') || '<p style="color:#aaa">No jobs</p>';
+      document.getElementById('failed-jobs').innerHTML = jobs.filter(j => j.status === 'failed').map(jobCard).join('') || '<p style="color:#aaa">No jobs</p>';
+    }
+
+    refresh();
+    setInterval(refresh, 3000);
+  </script>
+</body>
+</html>
