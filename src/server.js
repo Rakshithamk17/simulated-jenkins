@@ -4,6 +4,7 @@ const path = require('path');
 const { createJob, getAllJobs, getJobById } = require('./database');
 const { getWorkerStatus } = require('./workers');
 const { startScheduler } = require('./scheduler');
+const { fetchJenkinsfileStages } = require('./jenkinsfile-parser');
 
 const app = express();
 app.use(express.json());
@@ -13,7 +14,7 @@ app.use(express.static(path.join('C:\\simulated-jenkins', 'public')));
 startScheduler();
 
 // POST /webhook — simulates GitHub webhook
-app.post('/webhook', (req, res) => {
+app.post('/webhook', async (req, res) => {
   const { repo, branch, commit_hash, language } = req.body;
 
   if (!repo || !branch || !commit_hash) {
@@ -23,8 +24,6 @@ app.post('/webhook', (req, res) => {
   const id = uuidv4();
   const lang = language || 'general';
 
-  createJob(id, repo, branch, commit_hash, lang);
-
   console.log(`\n📥 New job received!`);
   console.log(`   Repo: ${repo}`);
   console.log(`   Branch: ${branch}`);
@@ -32,10 +31,17 @@ app.post('/webhook', (req, res) => {
   console.log(`   Language: ${lang}`);
   console.log(`   Job ID: ${id}`);
 
+  // Fetch stages from Jenkinsfile
+  console.log(`  🔍 Looking for Jenkinsfile in ${repo}@${branch}...`);
+  const stages = await fetchJenkinsfileStages(repo, branch);
+
+  createJob(id, repo, branch, commit_hash, lang, stages);
+
   res.status(201).json({
     message: 'Job created successfully',
     job_id: id,
-    status: 'queued'
+    status: 'queued',
+    stages: stages
   });
 });
 
@@ -60,7 +66,7 @@ app.get('/workers', (req, res) => {
   res.json(getWorkerStatus());
 });
 
-// GET /dashboard — serve dashboard
+// GET / — serve dashboard
 app.get('/', (req, res) => {
   res.sendFile(path.join('C:\\simulated-jenkins', 'public', 'index.html'));
 });

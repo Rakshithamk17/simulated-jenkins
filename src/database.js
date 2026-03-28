@@ -20,12 +20,10 @@ db.exec(`
   )
 `);
 
-function createJob(id, repo, branch, commit_hash, language) {
-  const stages = JSON.stringify([
-    { name: 'Build', status: 'pending' },
-    { name: 'Test', status: 'pending' },
-    { name: 'Deploy', status: 'pending' }
-  ]);
+function createJob(id, repo, branch, commit_hash, language, stageNames) {
+  const stages = JSON.stringify(
+    stageNames.map(name => ({ name, status: 'pending' }))
+  );
   const stmt = db.prepare(`
     INSERT INTO jobs (id, repo, branch, commit_hash, language, stages)
     VALUES (?, ?, ?, ?, ?, ?)
